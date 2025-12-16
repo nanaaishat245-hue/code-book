@@ -1,11 +1,6 @@
-import { createId, delay, mockDatabase } from "./mockDatabase";
+// import { createId, delay, mockDatabase } from "./mockDatabase";
+import {USER_ENDPOINTS, apiRequest} from "../config/api"
 
-const persistToken = (token) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem("token", JSON.stringify(token));
-};
 
 const persistEmail = (email) => {
   if (typeof window === "undefined") {
@@ -26,6 +21,22 @@ const clearPersistence = () => {
 
 const normaliseEmail = (email = "") => email.trim().toLowerCase();
 
+
+
+const transformUserData = (userData) => {
+   return {
+    id: userData._id,
+    _id: userData._id,
+    name: userData.name,
+    email: userData.email,
+    isAdmin: Boolean(userData.isAdmin),
+    cartList: userData.cartList || [],
+    orderList: userData.orderList || [],
+   };
+};
+
+
+
 const login = async (authDetail) => {
   const { email, password } = authDetail;
 
@@ -33,32 +44,27 @@ const login = async (authDetail) => {
     throw new Error("Email and password are required");
   }
 
-  const users = mockDatabase.getUsers();
-  const user = users.find(
-    (entry) =>
-      normaliseEmail(entry.email) === normaliseEmail(email) &&
-      entry.password === password
-  );
 
-  if (!user) {
-    throw new Error("Invalid email or password");
-  }
+try {
+  const userData = await apiRequest(USER_ENDPOINTS.LOGIN, {
+    method: "POST",
+    body: JSON.stringify({
+      email: normaliseEmail(email),
+      password,
+    })
+  })
 
-  const token = `token-${Date.now()}`;
-  const sessionUser = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    isAdmin: Boolean(user.isAdmin),
-    token
-  };
+const transformedUserData = transformUserData(userData);
+persistEmail(transformUserData.email);
 
-  persistToken(token);
-  persistEmail(user.email);
-  mockDatabase.setActiveUser(sessionUser);
+return transformedUserData;
 
-  return delay(sessionUser);
-};
+} catch (error) {
+  throw new Error (error.message || "invalid email or password")
+}
+}
+
+
 
 const register = async (authDetail) => {
   const { name, email, password } = authDetail;
@@ -67,32 +73,43 @@ const register = async (authDetail) => {
     throw new Error("All fields are required");
   }
 
-  const users = mockDatabase.getUsers();
-  const emailExists = users.some(
-    (user) => normaliseEmail(user.email) === normaliseEmail(email)
-  );
+ 
+try {
+  const userData = await apiRequest(USER_ENDPOINTS.REGISTER_USER, {
+    method: "POST",
+    body: JSON.stringify({
+      name: name.trim(),
+      email: normaliseEmail(email),
+      password,
+    })
+  })
 
-  if (emailExists) {
-    throw new Error("An account with this email already exists");
-  }
 
-  const newUser = {
-    id: createId(),
-    name: name.trim(),
-    email: email.trim(),
-    password,
-    isAdmin: false
-  };
+const transformedUserData = transformUserData(userData);
+persistEmail(transformedUserData.email);
 
-  mockDatabase.saveUsers([...users, newUser]);
+return transformedUserData;
 
-  return login({ email, password });
-};
+} catch (error) {
+      throw new Error(error.message ||"failed to register");
+
+}
+}
+
 
 const logout = async () => {
-  mockDatabase.setActiveUser(null);
-  clearPersistence();
-  return delay(true, 150);
+ try {
+  await apiRequest(USER_ENDPOINTS.LOGOUT, {
+    method: "POST",
+  })
+  clearPersistence;
+  return true;
+
+ } catch (error) {
+  clearPersistence()
+ throw new Error(error.message   || "Failed to logout");
+
+ }
 };
 
 const authService = {

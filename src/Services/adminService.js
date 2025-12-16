@@ -1,113 +1,121 @@
-import { createId, delay, mockDatabase } from "./mockDatabase";
+import { EBOOK_ENDPOINTS, apiRequest } from "../config/api";
+import { getUser } from "./index";
 
+/**
+ * Normalize product data for API submission
+ */
+const normaliseProduct = (product) => {
+  const {
+    name,
+    overview,
+    long_description,
+    longDescription,
+    rating,
+    poster,
+    size,
+    inStock,
+    in_stock,
+    bestSeller,
+    best_seller,
+    price,
+  } = product;
 
-const ensureAdmin = () => {
-    
-     const user = mockDatabase.getActiveUser() 
-
-     if(!user || !user.Admin) {
-         throw new Error("Admin access required")
-     }
-     return user
-}
-
-  const normaliseProduct  = (product) => {
-    const {
-        name,
-        overview,                                                                                                       
-        long_description,
-        rating,
-        poster,
-        size,
-        inStock,
-        in_stock,
-        bestSeller,
-        best_seller,
-        price
-    } = product
-
-    return{
-        name: name?.trim() || "",
-        overview: overview?.trim() || "",
-        long_description: long_description?.trim() || "",
-        rating: Number(rating),
-        poster: poster?.trim() || "",
-        size: Number(size),
-        in_stock: typeof inStock === "boolean" ? inStock : Boolean(in_stock),
-        best_Seller: typeof bestSeller === "boolean" ? bestSeller: Boolean(best_seller),
-        price: Number(price)
-    }
+  return {
+    name: name?.trim() || "",
+    overview: overview?.trim() || "",
+    longDescription: long_description?.trim() || longDescription?.trim() || "",
+    rating: Number(rating),
+    poster: poster?.trim() || "",
+    size: Number(size),
+    inStock: typeof inStock === "boolean" ? inStock : Boolean(in_stock),
+    bestSeller: typeof bestSeller === "boolean" ? bestSeller : Boolean(best_seller),
+    price: Number(price),
   };
+};
 
+/**
+ * Transform backend product response to match frontend format
+ */
+const transformProduct = (product) => {
+  return {
+    ...product,
+    long_description: product.longDescription || product.long_description,
+    longDescription: product.longDescription || product.long_description,
+    in_stock: product.inStock !== undefined ? product.inStock : product.in_stock,
+    best_seller: product.bestSeller !== undefined ? product.bestSeller : product.best_seller,
+  };
+};
 
-  const applyFeaturedSync = (productId, isBestSeller) => {
-        const featuredIds = mockDatabase.getFeaturedIds()
-        const exists = featuredIds.includes(productId);
+/**
+ * Create a new ebook/product (Admin only)
+ * @param {Object} ebookData - Product data
+ * @returns {Promise<Object>} Created product
+ */
+const createEbook = async (ebookData) => {
+  try {
+    const productData = normaliseProduct(ebookData);
 
-        if(isBestSeller && !exists) {
-            mockDatabase.saveFeaturedIds([productId, ...featuredIds])
-        }
-
-        if(!isBestSeller && exists) {
-            mockDatabase.saveFeaturedIds(featuredIds.filter((id) => id !== productId))
-        }
-  }
-
-  const createEbook = async(ebookData) => {
-       ensureAdmin()
-
-    const productData = normaliseProduct(ebookData)
-
-    if(!productData.name || !productData.overview) {
-        throw new Error("Name and Overview are Required")
+    if (!productData.name || !productData.overview || !productData.longDescription) {
+      throw new Error("Name, Overview, and Long Description are required");
     }
 
-    const newProduct = {
-        ...productData, 
-        id: createId
-    };
+    if (!productData.price || productData.price <= 0) {
+      throw new Error("Valid price is required");
+    }
 
-    const products = mockDatabase.getProducts(); 
-    mockDatabase.saveProducts([newProduct, ...products]) 
-    applyFeaturedSync(newProduct.id, newProduct.best_Seller)
+    if (!productData.rating || productData.rating < 1 || productData.rating > 5) {
+      throw new Error("Rating must be between 1 and 5");
+    }
 
-    return delay(newProduct)
+    const createdProduct = await apiRequest(EBOOK_ENDPOINTS.CREATE, {
+      method: "POST",
+      body: JSON.stringify(productData),
+    });
+
+    return transformProduct(createdProduct);
+  } catch (error) {
+    throw new Error(error.message || "Failed to create product");
   }
+};
 
-  const updateEbook = async (id, ebookData) => {
-     ensureAdmin()
+/**
+ * Update an existing ebook/product (Admin only)
+ * @param {string|number} id - Product ID
+ * @param {Object} ebookData - Updated product data
+ * @returns {Promise<Object>} Updated product
+ */
+const updateEbook = async (id, ebookData) => {
+  try {
+    const productData = normaliseProduct(ebookData);
 
-     const productId = Number(id)
-     const products = mockDatabase.getProducts()
-     const productIndex = products.findIndex((product) => product.id === productId)
+    const updatedProduct = await apiRequest(EBOOK_ENDPOINTS.UPDATE(id), {
+      method: "PATCH",
+      body: JSON.stringify(productData),
+    });
 
-     if(productIndex === -1) {
-        throw new Error("product not found")
-     }
-
-     const updatedProduct = {
-        ...products[productIndex],
-        ...normaliseProduct(ebookData),
-        id: productId
-     }
-
-     const updatedProducts = [...products] 
-    updatedProducts[productIndex] = updatedProduct;
-    mockDatabase.saveProducts(updatedProducts)
-    applyFeaturedSync(updatedProduct.id, updatedProduct.best_Seller)
-
-     return delay(updatedProduct)
+    return transformProduct(updatedProduct);
+  } catch (error) {
+    throw new Error(error.message || "Failed to update product");
   }
+};
 
- const checkAdminStatus = async () => {
-    const user = mockDatabase.getActiveUser()
-    return delay(Boolean(user?.isAdmin))
- }
+/**
+ * Check if current user is admin
+ * @returns {Promise<boolean>} True if user is admin
+ */
+const checkAdminStatus = async () => {
+  try {
+    const user = await getUser();
+    return Boolean(user?.isAdmin);
+  } catch (error) {
+    return false;
+  }
+};
 
 const adminService = {
-    createEbook,
-    updateEbook,
-    checkAdminStatus
-}
+  createEbook,
+  updateEbook,
+  checkAdminStatus,
+};
 
-export default adminService
+export default adminService;

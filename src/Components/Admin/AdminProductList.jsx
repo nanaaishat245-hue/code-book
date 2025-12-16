@@ -29,7 +29,7 @@ const AdminProductList = () => {
 
 
      const handleEditProduct = (pr) => {
-        setEditingProduct(null);
+        setEditingProduct(pr);
         setShowForm(true)
      }
              

@@ -10,12 +10,12 @@ const AdminProtectedRoute = ({children}) => {
      useEffect(() => {
         const checkAdminStatus = async () => {
             try {
-                const token = localStorage.getItem('token')
-                if(!token) {
-                    setIsAdmin(false)
-                    setLoading(false)
-                    return;
-                }
+                // const token = localStorage.getItem('token')
+                // if(!token) {
+                //     setIsAdmin(false)
+                //     setLoading(false)
+                //     return;
+                // }
 
                 const adminStatus = await adminService.checkAdminStatus();
                 setIsAdmin(adminStatus)
